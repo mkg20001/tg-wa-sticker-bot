@@ -1,0 +1,35 @@
+{
+  "name": "tg-wa-sticker-bot",
+  "version": "0.0.1",
+  "description": "Converts Telegram Sticker Packs into `.wastickers` for StickerMaker",
+  "bin": {
+    "tg-wa-sticker-bot": "bin.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "telegram",
+    "whatsapp",
+    "sticker",
+    "export",
+    "bot"
+  ],
+  "author": "Maciej Krüger <mkg20001@gmail.com>",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "telebot": "^1.2.6",
+    "teleutils": "github:mkg20001/teleutils",
+    "zip-stream": "^2.0.1"
+  },
+  "main": "bin.js",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mkg20001/tg-wa-sticker-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mkg20001/tg-wa-sticker-bot/issues"
+  },
+  "homepage": "https://github.com/mkg20001/tg-wa-sticker-bot#readme"
+}
