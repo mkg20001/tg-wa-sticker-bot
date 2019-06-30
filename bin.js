@@ -62,19 +62,24 @@ const convertPack = async (msg) => {
   const cover = core.tmp('cover.png')
   await core.exec('convert', [download[0].fetched.path, '-alpha', 'set', '-resize', '96x96', cover.path])
   await prom(cb => archive.entry(fs.readFileSync(cover.path), { name: 'icon.png' }, cb))
+  cover.cleanup()
 
   const converted = download.map(async (sticker) => core.queue('convert', async () => {
     const out = core.tmp(sticker.outname)
-    await core.exec('convert', [sticker.fetched.path, '-alpha', 'set', '-resize', '512x512', out.path]) // TODO: add padding
+    // padding https://stackoverflow.com/a/39775027/3990041 size https://stackoverflow.com/a/11920384/3990041
+    await core.exec('convert', [sticker.fetched.path, '-define', 'webp:extent=100kb', '-alpha', 'set', '-resize', '512x512', '-background', 'transparent', '-gravity', 'center', '-extent', '512x512', out.path])
     return {
       out,
-      name: sticker.outname
+      name: sticker.outname,
+      fetched: sticker.fetched
     }
   }))
 
   for (let i = 0; i < converted.length; i++) {
-    const {out, name} = await converted[i]
+    const {out, name, fetched} = await converted[i]
     await prom(cb => archive.entry(fs.readFileSync(out.path), { name }, cb))
+    fetched.cleanup()
+    out.cleanup()
   }
 
   await prom(cb => archive.entry(set.name, { name: 'author.txt' }, cb))
@@ -82,7 +87,9 @@ const convertPack = async (msg) => {
   archive.finish()
   await prom(cb => ws.once('close', cb))
 
-  return msg.reply.file(outPack.path, {file_name: set.title + '.wastickers', asReply: true})
+  await msg.reply.file(outPack.path, {fileName: set.title + '.wastickers', asReply: true})
+
+  outPack.cleanup()
 }
 
 core.start()
