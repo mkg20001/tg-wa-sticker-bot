@@ -21,7 +21,8 @@ Oh, and could you please...
 
 const core = require('teleutils')('wa-sticker-bot', {
   token: process.argv[2],
-  helloMessage: HELLO
+  helloMessage: HELLO,
+  breakSymetry: true // parallelize
 })
 
 const {bot} = core
