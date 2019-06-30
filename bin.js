@@ -26,15 +26,39 @@ const core = require('teleutils')('wa-sticker-bot', {
 
 const {bot} = core
 core.queue.init('process', 2)
-core.queue.init('fetch', 5)
+core.queue.init('fetch', 3)
 core.queue.init('convert', os.cpus().length)
 
 const Packer = require('zip-stream')
 
-bot.on('sticker', async (msg) => {
-  await msg.reply.text(`Please be patient while the pack is being converted. It could take up to 5 minutes.`, {asReply: true})
+const msgText = (params) => {
+  return `Please be patient while the pack is being converted.
+It could take up to 5 minutes.
 
-  await core.queue('process', async () => convertPack(msg))
+Currently need to convert a total of ${params.packs - 1} other pack${(params.packs - 1) === 1 ? '' : 's'}
+Estimated waiting time: ${params.packs * 60} seconds`
+}
+
+bot.on('sticker', async (msg) => {
+  const _msg = () => msgText({packs: core.queue._queues.process.todo.length + core.queue._queues.process.working})
+  const {chat: { id: chatId }, message_id: msgId} = await msg.reply.text(_msg(), {asReply: true})
+
+  const intv = setInterval(async () => {
+    await bot.editMessageText(chatId, msgId, _msg())
+  }, 1000)
+
+  const cleanup = async () => {
+    clearInterval(intv)
+    await bot.deleteMessage(chatId, msgId)
+  }
+
+  try {
+    await core.queue('process', async () => convertPack(msg))
+    await cleanup()
+  } catch (err) {
+    await cleanup()
+    throw err
+  }
 })
 
 const convertPack = async (msg) => {
@@ -50,8 +74,6 @@ const convertPack = async (msg) => {
     }
   }))
 
-  download = await Promise.all(download)
-
   const outPack = core.tmp('out.wastickers')
 
   // TODO: add archive.on('error')
@@ -59,21 +81,24 @@ const convertPack = async (msg) => {
   const ws = fs.createWriteStream(outPack.path)
   archive.pipe(ws)
 
+  const converted = download.map(async (sticker) => {
+    sticker = await sticker
+    return core.queue('convert', async () => { // queue AFTER dl finish
+      const out = core.tmp(sticker.outname)
+      // padding https://stackoverflow.com/a/39775027/3990041 size https://stackoverflow.com/a/11920384/3990041
+      await core.exec('convert', [sticker.fetched.path, '-define', 'webp:extent=100kb', '-alpha', 'set', '-resize', '512x512', '-background', 'transparent', '-gravity', 'center', '-extent', '512x512', out.path])
+      return {
+        out,
+        name: sticker.outname,
+        fetched: sticker.fetched
+      }
+    })
+  })
+
   const cover = core.tmp('cover.png')
-  await core.exec('convert', [download[0].fetched.path, '-alpha', 'set', '-resize', '96x96', cover.path])
+  await core.exec('convert', [(await download[0]).fetched.path, '-alpha', 'set', '-resize', '96x96', cover.path])
   await prom(cb => archive.entry(fs.readFileSync(cover.path), { name: 'icon.png' }, cb))
   cover.cleanup()
-
-  const converted = download.map(async (sticker) => core.queue('convert', async () => {
-    const out = core.tmp(sticker.outname)
-    // padding https://stackoverflow.com/a/39775027/3990041 size https://stackoverflow.com/a/11920384/3990041
-    await core.exec('convert', [sticker.fetched.path, '-define', 'webp:extent=100kb', '-alpha', 'set', '-resize', '512x512', '-background', 'transparent', '-gravity', 'center', '-extent', '512x512', out.path])
-    return {
-      out,
-      name: sticker.outname,
-      fetched: sticker.fetched
-    }
-  }))
 
   for (let i = 0; i < converted.length; i++) {
     const {out, name, fetched} = await converted[i]
