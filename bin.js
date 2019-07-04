@@ -113,6 +113,7 @@ const convertPack = async (msg) => {
   archive.finish()
   await prom(cb => ws.once('close', cb))
 
+  await msg.track('convert/sticker')
   await msg.reply.file(outPack.path, {fileName: set.title + '.wastickers', asReply: true})
 
   outPack.cleanup()
