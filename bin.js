@@ -64,7 +64,6 @@ bot.on('sticker', async (msg) => {
 
 const convertPack = async (msg) => {
   const set = await bot.getStickerSet(msg.sticker.set_name)
-  const archive = new Packer() // OR new packer(options)
 
   let download = set.stickers.map(async (sticker, i) => core.queue('fetch', async () => {
     const outname = 'sticker' + i + '.webp'
@@ -74,13 +73,6 @@ const convertPack = async (msg) => {
       sticker
     }
   }))
-
-  const outPack = core.tmp('out.wastickers')
-
-  // TODO: add archive.on('error')
-
-  const ws = fs.createWriteStream(outPack.path)
-  archive.pipe(ws)
 
   const converted = download.map(async (sticker) => {
     sticker = await sticker
@@ -96,27 +88,53 @@ const convertPack = async (msg) => {
     })
   })
 
+  let splitBy30 = converted.reduce((a, b) => {
+    let last = a[a.length - 1]
+    if (!last || last.length === 30) {
+      last = []
+      a.push(last)
+    }
+    last.push(b)
+
+    return a
+  }, [])
+
   const cover = core.tmp('cover.png')
   await core.exec('convert', [(await download[0]).fetched.path, '-alpha', 'set', '-resize', '96x96', cover.path])
-  await prom(cb => archive.entry(fs.readFileSync(cover.path), { name: 'icon.png' }, cb))
-  cover.cleanup()
 
-  for (let i = 0; i < converted.length; i++) {
-    const {out, name, fetched} = await converted[i]
-    await prom(cb => archive.entry(fs.readFileSync(out.path), { name }, cb))
-    fetched.cleanup()
-    out.cleanup()
+  for (var i = 0; i < splitBy30.length; i++) {
+    const archive = new Packer() // OR new packer(options)
+    const converted = splitBy30[i]
+
+    const outPack = core.tmp('out.wastickers')
+
+    // TODO: add archive.on('error')
+
+    const ws = fs.createWriteStream(outPack.path)
+    archive.pipe(ws)
+
+    await prom(cb => archive.entry(fs.readFileSync(cover.path), { name: 'icon.png' }, cb))
+
+    for (let i = 0; i < converted.length; i++) {
+      const {out, name, fetched} = await converted[i]
+      await prom(cb => archive.entry(fs.readFileSync(out.path), { name }, cb))
+      fetched.cleanup()
+      out.cleanup()
+    }
+
+    await prom(cb => archive.entry('Telegram @wa_sticker_bot', { name: 'author.txt' }, cb))
+    await prom(cb => archive.entry(set.title + (splitBy30.length === 1 ? '' : ` (${i + 1}/${splitBy30.length})`), { name: 'title.txt' }, cb)) // eslint-disable-line
+    archive.finish()
+    await prom(cb => ws.once('close', cb))
+
+    await msg.reply.file(outPack.path, {fileName: `${set.title}${splitBy30.length === 1 ? '' : `_${i + 1}_of_${splitBy30.length}`}.wastickers`, asReply: true})
+
+    outPack.cleanup()
   }
 
-  await prom(cb => archive.entry(set.name, { name: 'author.txt' }, cb))
-  await prom(cb => archive.entry(set.title, { name: 'title.txt' }, cb))
-  archive.finish()
-  await prom(cb => ws.once('close', cb))
+  cover.cleanup()
 
   await msg.track('convert/sticker')
-  await msg.reply.file(outPack.path, {fileName: set.title + '.wastickers', asReply: true})
-
-  outPack.cleanup()
 }
 
 core.start()

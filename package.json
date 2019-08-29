@@ -20,7 +20,7 @@
   "dependencies": {
     "telebot": "^1.2.6",
     "teleutils": "github:mkg20001/teleutils",
-    "zip-stream": "^2.0.1"
+    "zip-stream": "^2.1.2"
   },
   "main": "bin.js",
   "devDependencies": {},
